@@ -1,8 +1,10 @@
-// app/signup.tsx
-
 import React, { useState } from 'react';
 import { View, TextInput, Button, Text } from 'react-native';
-import { signUpWithEmail } from '../services/appwrite';
+import { signUpWithEmail, databases } from '../services/appwrite';
+
+// Use env for safety
+const DATABASE_ID = process.env.EXPO_PUBLIC_APPWRITE_DATABASE_ID!;
+const COLLECTION_ID = process.env.EXPO_PUBLIC_APPWRITE_USERS_COLLECTION_ID!;
 
 export default function SignupScreen() {
     const [email, setEmail] = useState('');
@@ -11,11 +13,30 @@ export default function SignupScreen() {
     const [result, setResult] = useState<string | null>(null);
 
     const handleSignup = async () => {
+        if (!DATABASE_ID || !COLLECTION_ID) {
+            setResult("Configuration error: Check Appwrite DB or Collection ID.");
+            return;
+        }
         try {
-            const res = await signUpWithEmail(email, password, name);
-            setResult('Signup Success! User ID: ' + res.$id);
+            // 1. Create user in Appwrite Auth
+            const user = await signUpWithEmail(email, password, name);
+
+            // 2. Add user doc to DB, ONLY fields that exist in your collection!
+            await databases.createDocument(
+                DATABASE_ID,
+                COLLECTION_ID,
+                user.$id, // Use Auth user ID as doc ID
+                {
+                    userId: user.$id,
+                    email,
+                    role: "user", // default; you can update later
+                    // REMOVE name: it is not in your schema!
+                }
+            );
+
+            setResult('Signup Success! User ID: ' + user.$id);
         } catch (e: any) {
-            setResult('Signup Failed: ' + e.message);
+            setResult('Signup Failed: ' + (e.message ?? JSON.stringify(e)));
         }
     };
 
