@@ -1,54 +1,51 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, Button, Alert } from 'react-native';
-import { loginWithEmail, account, getRole } from '../services/appwrite';
 import { useRouter } from 'expo-router';
+import { login, getCurrentUser, getRole } from '../services/appwrite';
 
 export default function Login() {
-    const router              = useRouter();
-    const [email, setEmail]   = useState('');
-    const [pw, setPw]         = useState('');
-    const [busy, setBusy]     = useState(false);
+    const router = useRouter();
+    const [email, setEmail] = useState('');
+    const [pwd, setPwd]     = useState('');
+    const [busy, setBusy]   = useState(false);
 
-    async function handleLogin() {
+    const handleLogin = async () => {
         setBusy(true);
         try {
-            await loginWithEmail(email.trim(), pw);
-
-            const me   = await account.get();
-            const role = await getRole(me.$id);
-
+            await login(email, pwd);
+            const user = await getCurrentUser();
+            if (!user) throw new Error('No user fetched');
+            const role = await getRole(user.$id);
             router.replace(role === 'coach' ? '/coach' : '/user');
         } catch (err: any) {
-            Alert.alert('Login failed', err.message ?? 'Unknown error');
+            Alert.alert('Login Failed', err.message);
         } finally {
             setBusy(false);
         }
-    }
+    };
 
     return (
-        <View style={{ flex: 1, padding: 16, justifyContent: 'center' }}>
+        <View style={{ flex: 1, padding: 20, justifyContent: 'center' }}>
             <Text style={{ fontSize: 24, marginBottom: 12 }}>Login</Text>
-
             <TextInput
                 placeholder="Email"
                 autoCapitalize="none"
-                keyboardType="email-address"
+                style={{ borderWidth: 1, padding: 8, marginBottom: 8 }}
                 value={email}
                 onChangeText={setEmail}
-                style={{ borderWidth: 1, borderColor: '#ccc', padding: 8, marginBottom: 8 }}
             />
-
             <TextInput
                 placeholder="Password"
                 secureTextEntry
-                value={pw}
-                onChangeText={setPw}
-                style={{ borderWidth: 1, borderColor: '#ccc', padding: 8, marginBottom: 12 }}
+                style={{ borderWidth: 1, padding: 8, marginBottom: 16 }}
+                value={pwd}
+                onChangeText={setPwd}
             />
-
-            <Button title={busy ? 'Logging in…' : 'Login'}
-                    disabled={busy || !email || !pw}
-                    onPress={handleLogin} />
+            <Button
+                title={busy ? '…' : 'Log in'}
+                onPress={handleLogin}
+                disabled={busy || !email || !pwd}
+            />
         </View>
     );
 }
