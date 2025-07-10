@@ -1,5 +1,7 @@
+// /app/profile-setup/ProfileForm.tsx
+
 import React, { useState } from "react";
-import { View, Text, TextInput, Button } from "react-native";
+import { View, TextInput, Button } from "react-native";
 import AvatarPicker from "../../components/AvatarPicker";
 import { databases } from "../../services/appwrite";
 
@@ -10,14 +12,17 @@ export default function ProfileForm({ user, profile }: any) {
     const [name, setName] = useState(profile.name ?? "");
     const [avatar, setAvatar] = useState(profile.avatar ?? "");
     const [goals, setGoals] = useState(profile.goals ?? "");
+    const [saving, setSaving] = useState(false);
 
     const handleSave = async () => {
+        setSaving(true);
         await databases.updateDocument(DATABASE_ID, COLLECTION_ID, user.$id, {
             name,
             avatar,
             ...(profile.role === "user" ? { goals } : {}),
         });
-        // Feedback etc.
+        setSaving(false);
+        // Optionally add feedback here!
     };
 
     return (
@@ -37,7 +42,7 @@ export default function ProfileForm({ user, profile }: any) {
                     onChangeText={setGoals}
                 />
             )}
-            <Button title="Save Profile" onPress={handleSave} />
+            <Button title={saving ? "Saving..." : "Save Profile"} onPress={handleSave} disabled={saving} />
         </View>
     );
 }

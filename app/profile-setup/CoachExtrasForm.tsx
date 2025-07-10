@@ -1,6 +1,9 @@
+// /app/profile-setup/CoachExtrasForm.tsx
+
 import React, { useState } from "react";
 import { View, TextInput, Button } from "react-native";
 import { databases } from "../../services/appwrite";
+import { router } from "expo-router";
 
 const DATABASE_ID = process.env.EXPO_PUBLIC_APPWRITE_DATABASE_ID!;
 const COLLECTION_ID = process.env.EXPO_PUBLIC_APPWRITE_USERS_COLLECTION_ID!;
@@ -8,13 +11,17 @@ const COLLECTION_ID = process.env.EXPO_PUBLIC_APPWRITE_USERS_COLLECTION_ID!;
 export default function CoachExtrasForm({ user, profile }: any) {
     const [certifications, setCertifications] = useState(profile.certifications ?? "");
     const [hourlyPrice, setHourlyPrice] = useState(profile.hourlyPrice ?? "");
+    const [bio, setBio] = useState(profile.bio ?? "");
+    const [saving, setSaving] = useState(false);
 
     const handleSave = async () => {
+        setSaving(true);
         await databases.updateDocument(DATABASE_ID, COLLECTION_ID, user.$id, {
             certifications,
             hourlyPrice: parseFloat(hourlyPrice),
+            bio,
         });
-        // Feedback etc.
+        router.replace("/coach");
     };
 
     return (
@@ -32,7 +39,15 @@ export default function CoachExtrasForm({ user, profile }: any) {
                 keyboardType="numeric"
                 onChangeText={setHourlyPrice}
             />
-            <Button title="Save Coach Info" onPress={handleSave} />
+            <TextInput
+                className="border p-2 w-full mb-2 rounded"
+                placeholder="Bio (Tell users about you!)"
+                value={bio}
+                onChangeText={setBio}
+                multiline
+                numberOfLines={3}
+            />
+            <Button title={saving ? "Saving..." : "Save Coach Info"} onPress={handleSave} disabled={saving} />
         </View>
     );
 }
