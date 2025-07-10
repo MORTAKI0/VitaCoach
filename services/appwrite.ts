@@ -48,6 +48,12 @@ export const APPWRITE_FUNCTION_ID        = extra.functionId          as string;
  * Works with both older SDKs (`createSession`) and v13+ (`createEmailSession`)
  */
 export async function loginWithEmail(email: string, password: string) {
+    // Avoid stale sessions causing a 401 on deleteSession
+    const me = await account.get().catch(() => null);
+    if (me) {
+        try { await account.deleteSession('current'); } catch {}
+    }
+
     if (typeof (account as any).createEmailSession === 'function') {
         // v13+
         return (account as any).createEmailSession(email, password);
@@ -61,6 +67,8 @@ export async function getCurrentUser() {
 }
 
 export async function logout() {
+    const me = await account.get().catch(() => null);
+    if (!me) return true;
     try { await account.deleteSession('current'); return true; } catch { return false; }
 }
 
@@ -88,6 +96,22 @@ export async function signUpWithEmail(
     name: string,
 ) {
     return account.create(ID.unique(), email, password, name);
+}
+
+/**
+ * Obtain a JWT via the /account/jwt endpoint.
+ * This bypasses older SDK behaviour that called /account/sessions/token.
+ */
+export async function fetchJWT(): Promise<string> {
+    const res = await fetch(`${appwriteEndpoint}/account/jwt`, {
+        method: 'POST',
+        headers: { 'X-Appwrite-Project': appwriteProjectId },
+        credentials: 'include',
+    });
+
+    if (!res.ok) throw new Error(await res.text());
+    const data = await res.json();
+    return data.jwt as string;
 }
 
 /** Return `"coach"` or `"user"` from the users collection */
