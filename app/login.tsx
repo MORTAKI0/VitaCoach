@@ -12,12 +12,12 @@ export default function LoginScreen() {
     const [password, setPassword] = useState("");
     const [result, setResult] = useState<string | null>(null);
 
-    // Helper to ensure no active session before login
+    // Ensure no active session before login
     const ensureLoggedOut = async () => {
         try {
             await account.deleteSession("current");
         } catch {
-            // no session? fine, ignore error
+            // Ignore errors if already logged out
         }
     };
 
@@ -28,26 +28,25 @@ export default function LoginScreen() {
             // 1. Log in
             await account.createEmailPasswordSession(email, password);
 
-            // 2. Get userId
+            // 2. Get user info and doc
             const user = await account.get();
-            const userId = user.$id;
+            const doc = await databases.getDocument(DATABASE_ID, COLLECTION_ID, user.$id);
 
-            // 3. Fetch user doc from DB to get role/profile
-            const doc = await databases.getDocument(
-                DATABASE_ID,
-                COLLECTION_ID,
-                userId
-            );
+            // 3. Profile completeness checks (customize as needed)
+            const isCoach = doc.role === "coach";
+            const isUser = doc.role === "user";
 
-            // 4. Check if profile is incomplete
-            const profileIncomplete =
-                !doc.avatar ||
-                (doc.role === "coach" && !doc.hourlyPrice);
+            // Required fields for profile completion
+            const profileComplete =
+                !!doc.name && !!doc.avatar && (
+                    (isCoach && !!doc.certifications && !!doc.hourlyPrice) ||
+                    (isUser && !!doc.goals)
+                );
 
-            if (profileIncomplete) {
+            if (!profileComplete) {
                 setResult("Login Success! Please complete your profile.");
                 setTimeout(() => router.replace("/profile-setup"), 600);
-            } else if (doc.role === "coach") {
+            } else if (isCoach) {
                 setResult("Login Success! Redirecting to coach dashboard...");
                 setTimeout(() => router.replace("/coach"), 600);
             } else {
