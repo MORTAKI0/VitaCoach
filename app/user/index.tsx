@@ -1,18 +1,22 @@
-import React, { useState, useEffect } from "react";
-import { View, Text, Button } from "react-native";
-import { getCurrentUser, logout } from "../../services/appwrite";
-import { router } from "expo-router"; // If using expo-router
+// app/user/index.tsx
+import React, { useState, useEffect } from 'react';
+import { View, Text, Button }        from 'react-native';
+import { getCurrentUser, logout }     from '../../services/appwrite';
+import { useRouter }                   from 'expo-router';
 
 export default function UserDashboard() {
-    const [user, setUser] = useState<any>(null);
+    const [user, setUser] = useState<{ name: string } | null>(null);
+    const router = useRouter();
 
     useEffect(() => {
-        getCurrentUser().then(setUser);
+        getCurrentUser()
+            .then(u => setUser(u))
+            .catch(() => router.replace('/login'));
     }, []);
 
     const handleLogout = async () => {
         await logout();
-        router.replace("/login"); // Redirect to login
+        router.replace('/login');
     };
 
     return (

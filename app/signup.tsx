@@ -1,98 +1,69 @@
+// app/signup.tsx
 import React, { useState } from 'react';
-import { View, TextInput, Button, Text, TouchableOpacity } from 'react-native';
-import { signUpWithEmail, databases } from '../services/appwrite';
+import { View, Text, TextInput, Button, Alert } from 'react-native';
+import { registerUserAndProfile } from '../services/appwrite';
+import { useRouter } from 'expo-router';
 
-// Use env for safety
-const DATABASE_ID = process.env.EXPO_PUBLIC_APPWRITE_DATABASE_ID!;
-const COLLECTION_ID = process.env.EXPO_PUBLIC_APPWRITE_USERS_COLLECTION_ID!;
-
-export default function SignupScreen() {
+export default function SignUp() {
+    const router = useRouter();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [name, setName] = useState('');
-    const [role, setRole] = useState<'user' | 'coach'>('user'); // NEW
-    const [result, setResult] = useState<string | null>(null);
+    const [role, setRole] = useState<'user'|'coach'>('user');
+    const [busy, setBusy] = useState(false);
 
-    const handleSignup = async () => {
-        if (!DATABASE_ID || !COLLECTION_ID) {
-            setResult("Configuration error: Check Appwrite DB or Collection ID.");
-            return;
-        }
+    const handleSignUp = async () => {
+        setBusy(true);
         try {
-            // 1. Create user in Appwrite Auth
-            const user = await signUpWithEmail(email, password, name);
-
-            // 2. Add user doc to DB, ONLY fields that exist in your collection!
-            await databases.createDocument(
-                DATABASE_ID,
-                COLLECTION_ID,
-                user.$id, // Use Auth user ID as doc ID
-                {
-                    userId: user.$id,
-                    email,
-                    role, // <-- role from state!
-                }
-            );
-
-            setResult('Signup Success! User ID: ' + user.$id);
-        } catch (e: any) {
-            setResult('Signup Failed: ' + (e.message ?? JSON.stringify(e)));
+            await registerUserAndProfile(email, password, name, role);
+            Alert.alert('Signed up!', 'Please log in.');
+            router.replace('/login');
+        } catch (err: any) {
+            Alert.alert('Error', err.message);
+        } finally {
+            setBusy(false);
         }
     };
 
-    // Role toggle UI: simple, mobile-friendly
     return (
-        <View className="flex-1 justify-center items-center px-4">
-            <Text className="text-xl font-bold mb-4">Sign Up Test</Text>
+        <View style={{ flex: 1, padding: 16, justifyContent: 'center' }}>
+            <Text style={{ fontSize: 24, marginBottom: 12 }}>Sign Up</Text>
             <TextInput
-                className="border p-2 w-full mb-2 rounded"
                 placeholder="Name"
+                style={{ borderWidth:1,borderColor:'#ccc',padding:8,marginBottom:8 }}
                 value={name}
                 onChangeText={setName}
             />
             <TextInput
-                className="border p-2 w-full mb-2 rounded"
                 placeholder="Email"
-                value={email}
-                autoCapitalize="none"
                 keyboardType="email-address"
+                style={{ borderWidth:1,borderColor:'#ccc',padding:8,marginBottom:8 }}
+                value={email}
                 onChangeText={setEmail}
             />
             <TextInput
-                className="border p-2 w-full mb-2 rounded"
                 placeholder="Password"
-                value={password}
                 secureTextEntry
+                style={{ borderWidth:1,borderColor:'#ccc',padding:8,marginBottom:8 }}
+                value={password}
                 onChangeText={setPassword}
             />
-
-            {/* --- Role Picker (User / Coach) --- */}
-            <View className="flex-row mb-2">
-                <TouchableOpacity
-                    style={{
-                        backgroundColor: role === 'user' ? '#3b82f6' : '#e5e7eb',
-                        padding: 10,
-                        borderRadius: 8,
-                        marginRight: 8,
-                    }}
-                    onPress={() => setRole('user')}
-                >
-                    <Text style={{ color: role === 'user' ? '#fff' : '#000' }}>User</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                    style={{
-                        backgroundColor: role === 'coach' ? '#3b82f6' : '#e5e7eb',
-                        padding: 10,
-                        borderRadius: 8,
-                    }}
-                    onPress={() => setRole('coach')}
-                >
-                    <Text style={{ color: role === 'coach' ? '#fff' : '#000' }}>Coach</Text>
-                </TouchableOpacity>
+            <Text>Role:</Text>
+            <View style={{ flexDirection:'row', marginBottom:12 }}>
+                {['user','coach'].map(r => (
+                    <Button
+                        key={r}
+                        title={r.charAt(0).toUpperCase()+r.slice(1)}
+                        onPress={()=>setRole(r as any)}
+                        color={role===r ? '#4F46E5' : '#999'}
+                    />
+                ))}
             </View>
-
-            <Button title="Sign Up" onPress={handleSignup} />
-            {result && <Text className="mt-4">{result}</Text>}
+            <Button
+                title={busy ? 'Signing up…' : 'Sign Up'}
+                onPress={handleSignUp}
+                disabled={busy}
+            />
         </View>
     );
 }

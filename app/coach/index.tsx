@@ -1,19 +1,25 @@
-
-import React, { useState, useEffect } from "react";
-import { View, Text, Button } from "react-native";
-import { getCurrentUser, logout } from "../../services/appwrite";
-import { router } from "expo-router";
+// app/coach/index.tsx
+import React, { useEffect, useState } from 'react';
+import { View, Text, Button } from 'react-native';
+import { useRouter }   from 'expo-router';
+import { getCurrentUser, logout } from '../../services/appwrite';
 
 export default function CoachDashboard() {
-    const [user, setUser] = useState<any>(null);
+    const [user, setUser] = useState<{ name: string } | null>(null);
+    const router = useRouter();
 
     useEffect(() => {
-        getCurrentUser().then(setUser);
+        getCurrentUser()
+            .then(u => {
+                if (!u) throw new Error('Not logged in');
+                setUser(u);
+            })
+            .catch(() => router.replace('/login'));
     }, []);
 
     const handleLogout = async () => {
         await logout();
-        router.replace("/login");
+        router.replace('/login');
     };
 
     return (
