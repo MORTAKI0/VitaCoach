@@ -26,21 +26,28 @@ export default function LoginScreen() {
         await ensureLoggedOut();
         try {
             // 1. Log in
-            const session = await account.createEmailPasswordSession(email, password);
+            await account.createEmailPasswordSession(email, password);
 
             // 2. Get userId
             const user = await account.get();
             const userId = user.$id;
 
-            // 3. Fetch user doc from DB to get role
+            // 3. Fetch user doc from DB to get role/profile
             const doc = await databases.getDocument(
                 DATABASE_ID,
                 COLLECTION_ID,
                 userId
             );
 
-            // 4. Redirect based on role
-            if (doc.role === "coach") {
+            // 4. Check if profile is incomplete
+            const profileIncomplete =
+                !doc.avatar ||
+                (doc.role === "coach" && !doc.hourlyPrice);
+
+            if (profileIncomplete) {
+                setResult("Login Success! Please complete your profile.");
+                setTimeout(() => router.replace("/profile-setup"), 600);
+            } else if (doc.role === "coach") {
                 setResult("Login Success! Redirecting to coach dashboard...");
                 setTimeout(() => router.replace("/coach"), 600);
             } else {
