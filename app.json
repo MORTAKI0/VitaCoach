@@ -7,11 +7,9 @@
     "icon": "./assets/images/icon.png",
     "scheme": "vitacoachv1",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
-    "ios": {
-      "supportsTablet": true
-    },
+    "ios": { "supportsTablet": true },
     "android": {
+      "package": "com.yourname.vitacoach",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
@@ -35,8 +33,15 @@
         }
       ]
     ],
-    "experiments": {
-      "typedRoutes": true
+    "experiments": { "typedRoutes": true },
+    "extra": {
+      "appwriteEndpoint":              "https://fra.cloud.appwrite.io/v1",
+      "appwriteProjectId":             "686e35d60034fb2f997c",
+      "appwriteFunctionApiKey":        "standard_0402062589…2dafce55",
+      "databaseId":                    "686ea09c0029d7f10e21",
+      "ratingsCollectionId":           "686fa13f003522640aad",
+      "usersCollectionId":             "686ea0b3001ac9375bd6",
+      "relationshipsCollectionId":     "686fa0a1003de75e03ea"
     }
   }
 }
