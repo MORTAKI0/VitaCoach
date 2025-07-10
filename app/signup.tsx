@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, TextInput, Button, Text } from 'react-native';
+import { View, TextInput, Button, Text, TouchableOpacity } from 'react-native';
 import { signUpWithEmail, databases } from '../services/appwrite';
 
 // Use env for safety
@@ -10,6 +10,7 @@ export default function SignupScreen() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [name, setName] = useState('');
+    const [role, setRole] = useState<'user' | 'coach'>('user'); // NEW
     const [result, setResult] = useState<string | null>(null);
 
     const handleSignup = async () => {
@@ -29,8 +30,7 @@ export default function SignupScreen() {
                 {
                     userId: user.$id,
                     email,
-                    role: "user", // default; you can update later
-                    // REMOVE name: it is not in your schema!
+                    role, // <-- role from state!
                 }
             );
 
@@ -40,6 +40,7 @@ export default function SignupScreen() {
         }
     };
 
+    // Role toggle UI: simple, mobile-friendly
     return (
         <View className="flex-1 justify-center items-center px-4">
             <Text className="text-xl font-bold mb-4">Sign Up Test</Text>
@@ -64,6 +65,32 @@ export default function SignupScreen() {
                 secureTextEntry
                 onChangeText={setPassword}
             />
+
+            {/* --- Role Picker (User / Coach) --- */}
+            <View className="flex-row mb-2">
+                <TouchableOpacity
+                    style={{
+                        backgroundColor: role === 'user' ? '#3b82f6' : '#e5e7eb',
+                        padding: 10,
+                        borderRadius: 8,
+                        marginRight: 8,
+                    }}
+                    onPress={() => setRole('user')}
+                >
+                    <Text style={{ color: role === 'user' ? '#fff' : '#000' }}>User</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                    style={{
+                        backgroundColor: role === 'coach' ? '#3b82f6' : '#e5e7eb',
+                        padding: 10,
+                        borderRadius: 8,
+                    }}
+                    onPress={() => setRole('coach')}
+                >
+                    <Text style={{ color: role === 'coach' ? '#fff' : '#000' }}>Coach</Text>
+                </TouchableOpacity>
+            </View>
+
             <Button title="Sign Up" onPress={handleSignup} />
             {result && <Text className="mt-4">{result}</Text>}
         </View>
