@@ -1,8 +1,11 @@
 import React, { useState } from "react";
 import { View, TextInput, Button, Text, Pressable } from "react-native";
-import { account } from "../services/appwrite";
+import { account, databases } from "../services/appwrite";
 import { OAuthProvider } from "appwrite";
-import { router } from "expo-router"; // import router!
+import { router } from "expo-router";
+
+const DATABASE_ID = process.env.EXPO_PUBLIC_APPWRITE_DATABASE_ID!;
+const COLLECTION_ID = process.env.EXPO_PUBLIC_APPWRITE_USERS_COLLECTION_ID!;
 
 export default function LoginScreen() {
     const [email, setEmail] = useState("");
@@ -20,14 +23,30 @@ export default function LoginScreen() {
 
     const handleLogin = async () => {
         setResult(null);
-        await ensureLoggedOut(); // always logout first
+        await ensureLoggedOut();
         try {
-            await account.createEmailPasswordSession(email, password);
-            setResult("Login Success!");
-            // REDIRECT to user dashboard
-            setTimeout(() => {
-                router.replace("/user"); // Use .replace so back button doesn't go to login
-            }, 500); // Give a short delay for UI feedback, optional
+            // 1. Log in
+            const session = await account.createEmailPasswordSession(email, password);
+
+            // 2. Get userId
+            const user = await account.get();
+            const userId = user.$id;
+
+            // 3. Fetch user doc from DB to get role
+            const doc = await databases.getDocument(
+                DATABASE_ID,
+                COLLECTION_ID,
+                userId
+            );
+
+            // 4. Redirect based on role
+            if (doc.role === "coach") {
+                setResult("Login Success! Redirecting to coach dashboard...");
+                setTimeout(() => router.replace("/coach"), 600);
+            } else {
+                setResult("Login Success! Redirecting to user dashboard...");
+                setTimeout(() => router.replace("/user"), 600);
+            }
         } catch (e: any) {
             setResult("Login Failed: " + e.message);
         }
