@@ -7,12 +7,10 @@ import { Models } from 'appwrite';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 
-// --- Types ---
 type Relationship = Models.Document & { coachId: string; status: 'requested' | 'active' | 'ended'; };
 type CoachProfile = Models.Document & { name: string; avatar?: string; specialization?: string };
 
-// --- Layout Breakpoint ---
-const WEB_BREAKPOINT = 1024; // A common breakpoint for two-column layouts
+const WEB_BREAKPOINT = 1024;
 
 export default function UserDashboard() {
     const [user, setUser] = useState<Models.User<Models.Preferences> | null>(null);
@@ -25,17 +23,14 @@ export default function UserDashboard() {
     const { width } = useWindowDimensions();
     const isWebLayout = width >= WEB_BREAKPOINT;
 
-    // --- Data Fetching ---
     const fetchData = async () => {
         try {
             const currentUser = await getCurrentUser();
             if (!currentUser) return router.replace('/login');
             setUser(currentUser);
-
             const relRes = await databases.listDocuments(DATABASE_ID, RELATIONSHIPS_COLLECTION_ID, [
                 Query.equal('userId', currentUser.$id), Query.notEqual('status', 'ended')
             ]);
-
             if (relRes.total > 0) {
                 const currentRel = relRes.documents[0] as Relationship;
                 setRelationship(currentRel);
@@ -45,13 +40,8 @@ export default function UserDashboard() {
                 setRelationship(null);
                 setCoach(null);
             }
-        } catch (error) {
-            console.error("Failed to fetch user dashboard data:", error);
-            // Don't auto-redirect on fetch error, show a message instead
-            // router.replace('/login');
-        } finally {
-            setLoading(false);
-        }
+        } catch (error) { console.error("Failed to fetch dashboard data:", error); }
+        finally { setLoading(false); }
     };
 
     useEffect(() => { fetchData(); }, []);
@@ -70,31 +60,16 @@ export default function UserDashboard() {
         return 'Good evening';
     };
 
-    // --- Reusable Components for Clean UI ---
     const StatCard = ({ icon, label, value, color }: any) => (
-        <View style={styles.statCard}>
-            <MaterialCommunityIcons name={icon} size={28} color={color} />
-            <Text style={styles.statLabel}>{label}</Text>
-            <Text style={[styles.statValue, { color }]}>{value}</Text>
-        </View>
+        <View style={styles.statCard}><MaterialCommunityIcons name={icon} size={28} color={color} /><Text style={styles.statLabel}>{label}</Text><Text style={[styles.statValue, { color }]}>{value}</Text></View>
     );
 
     const ActionRow = ({ icon, text, onPress }: any) => (
-        <Pressable style={styles.actionRow} onPress={onPress}>
-            <MaterialCommunityIcons name={icon} size={20} color="#4B5563" />
-            <Text style={styles.actionText}>{text}</Text>
-            <MaterialCommunityIcons name="chevron-right" size={20} color="#D1D5DB" />
-        </Pressable>
+        <Pressable style={styles.actionRow} onPress={onPress}><MaterialCommunityIcons name={icon} size={20} color="#4B5563" /><Text style={styles.actionText}>{text}</Text><MaterialCommunityIcons name="chevron-right" size={20} color="#D1D5DB" /></Pressable>
     );
 
     const ActivityItem = ({ text, time, color }: any) => (
-        <View style={styles.activityItem}>
-            <View style={[styles.activityDot, { backgroundColor: color }]} />
-            <View>
-                <Text style={styles.activityText}>{text}</Text>
-                <Text style={styles.activityTime}>{time}</Text>
-            </View>
-        </View>
+        <View style={styles.activityItem}><View style={[styles.activityDot, { backgroundColor: color }]} /><View><Text style={styles.activityText}>{text}</Text><Text style={styles.activityTime}>{time}</Text></View></View>
     );
 
     const styles = createStyles(isWebLayout);
@@ -105,50 +80,44 @@ export default function UserDashboard() {
 
     return (
         <SafeAreaView style={styles.container}>
-            {/* 1. Persistent Navigation Header */}
             <View style={styles.navBar}>
-                <View style={styles.logoContainer}>
-                    <MaterialCommunityIcons name="dumbbell" size={28} color="#4F46E5" />
-                    <Text style={styles.logoText}>FitCoach</Text>
-                </View>
-                <View style={styles.navActions}>
-                    <Pressable style={styles.navButton}><MaterialCommunityIcons name="bell-outline" size={22} color="#4B5563" /></Pressable>
-                    <Pressable style={styles.navButton} onPress={() => router.push('/profile-setup')}><MaterialCommunityIcons name="cog-outline" size={22} color="#4B5563" /></Pressable>
-                    <Pressable style={styles.navButton} onPress={handleLogout}><MaterialCommunityIcons name="logout" size={22} color="#EF4444" /></Pressable>
-                </View>
+                <View style={styles.logoContainer}><MaterialCommunityIcons name="dumbbell" size={28} color="#4F46E5" /><Text style={styles.logoText}>FitCoach</Text></View>
+                <View style={styles.navActions}><Pressable style={styles.navButton}><MaterialCommunityIcons name="bell-outline" size={22} color="#4B5563" /></Pressable><Pressable style={styles.navButton} onPress={() => router.push('/profile-setup')}><MaterialCommunityIcons name="cog-outline" size={22} color="#4B5563" /></Pressable><Pressable style={styles.navButton} onPress={handleLogout}><MaterialCommunityIcons name="logout" size={22} color="#EF4444" /></Pressable></View>
             </View>
 
-            {/* 2. Scrollable Content Area */}
             <ScrollView contentContainerStyle={styles.scrollContainer} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
-                {/* Welcome Header */}
-                <View style={styles.welcomeHeader}>
-                    <View style={styles.userAvatarContainer}>
-                        <Image source={{ uri: user?.prefs.avatar || undefined }} style={styles.userAvatar} />
-                    </View>
-                    <View>
-                        <Text style={styles.greeting}>{getGreeting()},</Text>
-                        <Text style={styles.userName}>{user?.name}</Text>
-                    </View>
-                </View>
+                <View style={styles.welcomeHeader}><View style={styles.userAvatarContainer}><Image source={{ uri: user?.prefs.avatar || undefined }} style={styles.userAvatar} /></View><View><Text style={styles.greeting}>{getGreeting()},</Text><Text style={styles.userName}>{user?.name}</Text></View></View>
 
-                {/* 3. Main Two-Column Layout */}
                 <View style={styles.mainLayout}>
-                    {/* Left Column */}
                     <View style={styles.leftColumn}>
                         {relationship && coach ? (
                             <View style={styles.card}>
                                 <View style={styles.cardHeader}>
-                                    <View style={[styles.statusIcon, { backgroundColor: '#10B9811A' }]}><MaterialCommunityIcons name="check-circle" size={16} color="#10B981" /></View>
+                                    <View style={[styles.statusIcon, { backgroundColor: relationship.status === 'active' ? '#10B9811A' : '#F59E0B1A' }]}>
+                                        <MaterialCommunityIcons name={relationship.status === 'active' ? "check-circle" : "clock-outline"} size={16} color={relationship.status === 'active' ? '#10B981' : '#F59E0B'} />
+                                    </View>
                                     <Text style={styles.cardTitle}>Your Training Journey</Text>
-                                    <View style={styles.statusBadge}><Text style={styles.statusBadgeText}>Active</Text></View>
+                                    <View style={[styles.statusBadge, { backgroundColor: relationship.status === 'active' ? '#10B981' : '#F59E0B' }]}><Text style={styles.statusBadgeText}>{relationship.status}</Text></View>
                                 </View>
+
+                                {relationship.status === 'active' ? (
+                                    <>
+                                        <Text style={styles.cardDescription}>Your workout plan is ready. Let's get to work!</Text>
+                                        {/* This line will be error-free after the fix */}
+                                        <Pressable style={styles.primaryButton} onPress={() => router.push('/user/my-plan')}>
+                                            <MaterialCommunityIcons name="clipboard-text-play-outline" size={20} color="white" />
+                                            <Text style={styles.primaryButtonText}>View My Workout Plan</Text>
+                                        </Pressable>
+                                    </>
+                                ) : (
+                                    <Text style={styles.cardDescription}>Your coaching request is pending approval. You'll be notified once {coach.name} responds.</Text>
+                                )}
+
                                 <Pressable style={styles.coachInfoCard} onPress={() => router.push(`/coaches/${coach.$id}`)}>
                                     <Image source={{ uri: coach.avatar }} style={styles.coachAvatar} />
                                     <View style={{ flex: 1 }}><Text style={styles.coachName}>{coach.name}</Text><Text style={styles.coachSpec}>{coach.specialization}</Text></View>
                                     <MaterialCommunityIcons name="chevron-right" size={24} color="#9CA3AF" />
                                 </Pressable>
-                                <Text style={styles.cardDescription}>Access your personalized training plan and track your progress with your dedicated coach.</Text>
-                                <Pressable style={styles.primaryButton} onPress={() => router.push(`/coaches/${coach.$id}`)}><Text style={styles.primaryButtonText}>View Coach Profile</Text></Pressable>
                             </View>
                         ) : (
                             <View style={[styles.card, { alignItems: 'center', backgroundColor: '#F9FAFB' }]}>
@@ -164,13 +133,12 @@ export default function UserDashboard() {
                             <StatCard icon="chart-line" label="Progress" value="85%" color="#8B5CF6" />
                         </View>
                     </View>
-
-                    {/* Right Column (Sidebar) */}
                     <View style={styles.rightColumn}>
                         <View style={styles.card}>
                             <Text style={styles.sidebarTitle}>Quick Actions</Text>
                             <ActionRow icon="account-edit-outline" text="Edit Profile" onPress={() => router.push('/profile-setup')} />
-                            <ActionRow icon="dumbbell" text="My Workouts" onPress={() => {}} />
+                            {/* This line will also be error-free */}
+                            <ActionRow icon="dumbbell" text="My Workouts" onPress={() => router.push('/user/my-plan')} />
                             <ActionRow icon="chart-timeline-variant" text="View Progress" onPress={() => {}} />
                             <ActionRow icon="help-circle-outline" text="Help & Support" onPress={() => {}} />
                         </View>
@@ -189,7 +157,7 @@ export default function UserDashboard() {
 
 const createStyles = (isWebLayout: boolean) => StyleSheet.create({
     container: { flex: 1, backgroundColor: '#F8FAFC' },
-    loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F8FAFC' },
+    loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     navBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 24, height: 64, backgroundColor: 'white', borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
     logoContainer: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     logoText: { fontSize: 20, fontWeight: 'bold', color: '#1F2937' },
@@ -207,15 +175,15 @@ const createStyles = (isWebLayout: boolean) => StyleSheet.create({
     card: { backgroundColor: 'white', borderRadius: 20, padding: 24, borderWidth: 1, borderColor: '#F3F4F6', shadowColor: "#9CA3AF", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 12 },
     cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },
     cardTitle: { fontSize: 18, fontWeight: '600', color: '#1F2937', flex: 1 },
-    cardDescription: { fontSize: 15, color: '#6B7280', lineHeight: 22, marginVertical: 8 },
+    cardDescription: { fontSize: 15, color: '#6B7280', lineHeight: 22, marginBottom: 16 },
     statusIcon: { width: 28, height: 28, borderRadius: 14, justifyContent: 'center', alignItems: 'center' },
-    statusBadge: { alignSelf: 'flex-start', paddingVertical: 4, paddingHorizontal: 12, borderRadius: 100, backgroundColor: '#334155' },
-    statusBadgeText: { color: 'white', fontWeight: '500', fontSize: 12, textTransform: 'capitalize' },
-    coachInfoCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#F8FAFC', padding: 12, borderRadius: 12, borderWidth: 1, borderColor: '#E5E7EB', marginVertical: 8 },
+    statusBadge: { paddingVertical: 4, paddingHorizontal: 12, borderRadius: 100 },
+    statusBadgeText: { color: 'white', fontWeight: 'bold', fontSize: 12, textTransform: 'capitalize' },
+    coachInfoCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#F8FAFC', padding: 12, borderRadius: 12, borderWidth: 1, borderColor: '#E5E7EB', marginTop: 8 },
     coachAvatar: { width: 48, height: 48, borderRadius: 24 },
     coachName: { fontSize: 16, fontWeight: 'bold', color: '#111827' },
     coachSpec: { fontSize: 14, color: '#6B7280' },
-    primaryButton: { backgroundColor: '#1F2937', paddingVertical: 14, borderRadius: 12, alignItems: 'center', marginTop: 8 },
+    primaryButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#4F46E5', paddingVertical: 14, borderRadius: 12, gap: 8, marginTop: 8 },
     primaryButtonText: { color: 'white', fontSize: 16, fontWeight: '600' },
     iconCircle: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#E0E7FF', justifyContent: 'center', alignItems: 'center', marginBottom: 16 },
     statsGrid: { flexDirection: 'row', gap: 16 },
