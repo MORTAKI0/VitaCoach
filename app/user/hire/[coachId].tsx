@@ -16,8 +16,6 @@ export default function HireCoach() {
 
         try {
             const me = await account.get();
-
-            // VALIDATION: Check if user already has an active or requested coach
             const existingRelationships = await databases.listDocuments(
                 DATABASE_ID,
                 RELATIONSHIPS_COLLECTION_ID,
@@ -30,12 +28,17 @@ export default function HireCoach() {
                 return;
             }
 
-            // Create the new relationship document
+            // --- CORRECTED: Added the createdAt field ---
             await databases.createDocument(
                 DATABASE_ID,
                 RELATIONSHIPS_COLLECTION_ID,
                 ID.unique(),
-                { userId: me.$id, coachId, status: 'requested' }
+                {
+                    userId: me.$id,
+                    coachId,
+                    status: 'requested',
+                    createdAt: new Date().toISOString(), // This fixes the 1970 timestamp issue
+                }
             );
             setStatus('success');
             setTimeout(() => router.replace(`/coaches/${coachId}`), 1500);
@@ -48,7 +51,6 @@ export default function HireCoach() {
     return (
         <View style={styles.container}>
             {status === 'hiring' && <ActivityIndicator size="large" />}
-
             {status === 'idle' && (
                 <>
                     <Text style={styles.title}>Send Hire Request?</Text>
@@ -56,11 +58,7 @@ export default function HireCoach() {
                     <Button title="Confirm & Send Request" onPress={handleHire} />
                 </>
             )}
-
-            {status === 'success' && (
-                <Text style={styles.title}>✅ Request Sent!</Text>
-            )}
-
+            {status === 'success' && <Text style={styles.title}>✅ Request Sent!</Text>}
             {status === 'error' && (
                 <>
                     <Text style={styles.title}>❌ Error</Text>

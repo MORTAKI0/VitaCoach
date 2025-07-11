@@ -13,6 +13,7 @@ export const USERS_COLLECTION_ID         = extra.usersCollectionId         as st
 export const RATINGS_COLLECTION_ID       = extra.ratingsCollectionId       as string;
 export const RELATIONSHIPS_COLLECTION_ID = extra.relationshipsCollectionId as string;
 export const APPWRITE_FUNCTION_ID        = extra.functionId                as string;
+export const WORKOUTS_COLLECTION_ID      = extra.workoutsCollectionId as string;
 
 if (!appwriteEndpoint || !appwriteProjectId) throw new Error('[Appwrite Config] Endpoint or Project ID is missing.');
 if (!DATABASE_ID || !USERS_COLLECTION_ID) throw new Error('[Appwrite Config] Database ID or Users Collection ID is missing.');
