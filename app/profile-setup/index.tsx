@@ -1,136 +1,120 @@
-// /app/profile-setup/index.tsx
-
+// app/profile-setup/index.tsx
 import React, { useEffect, useState } from "react";
-import { View, Text, TextInput, Button, ActivityIndicator, ScrollView, Platform, Alert } from "react-native";
-import AvatarPicker from "../../components/AvatarPicker";
-import { getCurrentUser, databases } from "../../services/appwrite";
+import { View, Text, TextInput, Button, ActivityIndicator, ScrollView, StyleSheet, Alert } from "react-native";
+import { getCurrentUser, databases, DATABASE_ID, USERS_COLLECTION_ID } from "../../services/appwrite"; // CORRECTED: Import constants
 import { router } from "expo-router";
-
-const DATABASE_ID = process.env.EXPO_PUBLIC_APPWRITE_DATABASE_ID!;
-const COLLECTION_ID = process.env.EXPO_PUBLIC_APPWRITE_USERS_COLLECTION_ID!;
+import { Models } from "appwrite";
+// Note: AvatarPicker component is assumed to exist from your code
+// import AvatarPicker from "../../components/AvatarPicker";
 
 export default function ProfileSetupScreen() {
-    const [user, setUser] = useState<any>(null);
+    const [user, setUser] = useState<Models.User<Models.Preferences> | null>(null);
     const [profile, setProfile] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
 
-    // Shared fields
+    // Form fields
     const [name, setName] = useState("");
     const [avatar, setAvatar] = useState("");
     const [bio, setBio] = useState("");
-    // User only
     const [goals, setGoals] = useState("");
-    // Coach only
     const [certifications, setCertifications] = useState("");
     const [hourlyPrice, setHourlyPrice] = useState("");
 
     useEffect(() => {
-        (async () => {
+        const loadProfile = async () => {
             setLoading(true);
-            const u = await getCurrentUser();
-            setUser(u);
-            if (u) {
-                const doc = await databases.getDocument(DATABASE_ID, COLLECTION_ID, u.$id);
+            try {
+                const u = await getCurrentUser();
+                if (!u) return router.replace('/login');
+                setUser(u);
+
+                // Use imported constants
+                const doc = await databases.getDocument(DATABASE_ID, USERS_COLLECTION_ID, u.$id);
                 setProfile(doc);
+
+                // Populate form fields
                 setName(doc.name ?? "");
                 setAvatar(doc.avatar ?? "");
                 setBio(doc.bio ?? "");
-                setGoals(doc.goals ?? "");
-                setCertifications(doc.certifications ?? "");
-                setHourlyPrice(doc.hourlyPrice?.toString() ?? "");
+                if(doc.role === 'user') setGoals(doc.goals ?? "");
+                if(doc.role === 'coach') {
+                    setCertifications(doc.certifications ?? "");
+                    setHourlyPrice(doc.hourlyPrice?.toString() ?? "");
+                }
+            } catch (error: any) {
+                Alert.alert("Error Loading Profile", error.message);
+                router.replace('/');
+            } finally {
+                setLoading(false);
             }
-            setLoading(false);
-        })();
+        };
+        loadProfile();
     }, []);
 
     const handleSave = async () => {
+        if (!user) return;
         setSaving(true);
         try {
-            let data: any = {
-                name,
-                avatar,
-                bio,
-            };
-            if (profile.role === "user") {
-                data.goals = goals;
-            }
+            const data: any = { name, avatar, bio };
+            if (profile.role === "user") data.goals = goals;
             if (profile.role === "coach") {
                 data.certifications = certifications;
-                data.hourlyPrice = parseFloat(hourlyPrice);
+                const price = parseFloat(hourlyPrice);
+                data.hourlyPrice = isNaN(price) ? 0 : price;
             }
-            await databases.updateDocument(DATABASE_ID, COLLECTION_ID, user.$id, data);
 
-            // --- Redirect immediately after save (NO setTimeout, NO Alert for navigation) ---
-            if (profile.role === "coach") {
-                router.replace("/coach");
-            } else {
-                router.replace("/user");
-            }
+            // Use imported constants
+            await databases.updateDocument(DATABASE_ID, USERS_COLLECTION_ID, user.$id, data);
+
+            // Redirect on success
+            Alert.alert("Success", "Your profile has been updated.", [
+                { text: "OK", onPress: () => router.replace(profile.role === 'coach' ? '/coach' : '/user') }
+            ]);
+
         } catch (e: any) {
-            // Only show Alert for error, not for success
-            Alert.alert("Save Error", e.message || JSON.stringify(e));
+            Alert.alert("Save Error", e.message || "An unknown error occurred.");
         } finally {
             setSaving(false);
         }
     };
 
-    if (loading || !user || !profile) return <ActivityIndicator />;
+    if (loading || !user || !profile) {
+        return <ActivityIndicator style={styles.loader} size="large" />;
+    }
 
     return (
-        <ScrollView className="flex-1 px-4" contentContainerStyle={{ flexGrow: 1, justifyContent: "center", alignItems: "center" }}>
-            <Text className="text-2xl font-bold mb-2 text-center">Complete Your Profile</Text>
-            <Text className="mb-1 w-full">Avatar (emoji for now):</Text>
-            <AvatarPicker avatar={avatar} onChange={setAvatar} />
+        <ScrollView contentContainerStyle={styles.container}>
+            <Text style={styles.title}>Complete Your Profile</Text>
 
-            <TextInput
-                className="border p-2 w-full mb-2 rounded"
-                placeholder="Name"
-                value={name}
-                onChangeText={setName}
-            />
+            {/* <Text style={styles.label}>Avatar (emoji for now):</Text>
+            <AvatarPicker avatar={avatar} onChange={setAvatar} /> */}
+
+            <TextInput style={styles.input} placeholder="Name" value={name} onChangeText={setName} />
 
             {profile.role === "user" && (
-                <TextInput
-                    className="border p-2 w-full mb-2 rounded"
-                    placeholder="Your Goals (e.g., lose weight)"
-                    value={goals}
-                    onChangeText={setGoals}
-                />
+                <TextInput style={styles.input} placeholder="Your Goals (e.g., lose weight)" value={goals} onChangeText={setGoals} />
             )}
 
             {profile.role === "coach" && (
                 <>
-                    <TextInput
-                        className="border p-2 w-full mb-2 rounded"
-                        placeholder="Certifications (comma separated)"
-                        value={certifications}
-                        onChangeText={setCertifications}
-                    />
-                    <TextInput
-                        className="border p-2 w-full mb-2 rounded"
-                        placeholder="Hourly Price (USD)"
-                        value={hourlyPrice}
-                        keyboardType="numeric"
-                        onChangeText={setHourlyPrice}
-                    />
+                    <TextInput style={styles.input} placeholder="Certifications (comma separated)" value={certifications} onChangeText={setCertifications} />
+                    <TextInput style={styles.input} placeholder="Hourly Price (USD)" value={hourlyPrice} keyboardType="numeric" onChangeText={setHourlyPrice} />
                 </>
             )}
 
-            <TextInput
-                className="border p-2 w-full mb-2 rounded"
-                placeholder="Bio (optional, share about you)"
-                value={bio}
-                onChangeText={setBio}
-                multiline
-                numberOfLines={3}
-            />
+            <TextInput style={[styles.input, styles.multiline]} placeholder="Bio (optional, share about you)" value={bio} onChangeText={setBio} multiline />
 
-            <Button
-                title={saving ? "Saving..." : "Save Profile"}
-                onPress={handleSave}
-                disabled={saving}
-            />
+            {saving ? <ActivityIndicator size="large"/> : <Button title="Save Profile" onPress={handleSave} />}
         </ScrollView>
     );
 }
+
+const styles = StyleSheet.create({
+    loader: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+    container: { flexGrow: 1, justifyContent: 'center', padding: 20 },
+    title: { fontSize: 24, fontWeight: 'bold', textAlign: 'center', marginBottom: 24 },
+    label: { alignSelf: 'flex-start', marginLeft: 5, marginBottom: 5 },
+    input: { borderWidth: 1, borderColor: '#ddd', padding: 12, borderRadius: 8, marginBottom: 16, width: '100%' },
+    multiline: { height: 100, textAlignVertical: 'top' },
+});
