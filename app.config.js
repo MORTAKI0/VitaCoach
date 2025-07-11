@@ -13,8 +13,10 @@ export default ({ config }) => ({
         ratingsCollectionId:       process.env.RATINGS_COLLECTION_ID,
         relationshipsCollectionId: process.env.RELATIONSHIPS_COLLECTION_ID,
         functionId:                process.env.APPWRITE_FUNCTION_ID,
+        workoutsCollectionId:      process.env.WORKOUTS_COLLECTION_ID,
 
         // preserve any other extras (e.g. router, eas)
         ...(config.extra ?? {}),
     },
 });
+
