@@ -1,21 +1,30 @@
 // app/coach/index.tsx
-import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, Alert, Pressable, SafeAreaView } from 'react-native';
-import { useRouter } from 'expo-router';
-import { getCurrentUser, logout, databases, Query, DATABASE_ID, RELATIONSHIPS_COLLECTION_ID, USERS_COLLECTION_ID } from '../../services/appwrite';
-import { Models } from 'appwrite';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
+import { Models } from 'appwrite';
+import { Image } from 'expo-image';
+import { useRouter } from 'expo-router';
+import React, { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { DATABASE_ID, databases, getCurrentUser, logout, Query, RELATIONSHIPS_COLLECTION_ID, USERS_COLLECTION_ID } from '../../services/appwrite';
 
+// --- Type Definitions ---
 type Relationship = Models.Document & { userId: string; status: 'requested' | 'active' | 'ended'; };
+type ClientProfile = Models.Document & { name: string; avatar?: string; };
+
+// --- Layout Breakpoint ---
+const WEB_BREAKPOINT = 1024; // A common breakpoint for two-column desktop layouts
 
 export default function CoachDashboard() {
     const [user, setUser] = useState<Models.User<Models.Preferences> | null>(null);
     const [requests, setRequests] = useState<Relationship[]>([]);
     const [clients, setClients] = useState<Relationship[]>([]);
+    const [clientProfiles, setClientProfiles] = useState<Record<string, ClientProfile>>({});
     const [loading, setLoading] = useState(true);
     const [processingId, setProcessingId] = useState<string | null>(null);
+
     const router = useRouter();
+    const { width } = useWindowDimensions();
+    const isWebLayout = width >= WEB_BREAKPOINT;
 
     const fetchData = useCallback(async () => {
         try {
@@ -30,8 +39,20 @@ export default function CoachDashboard() {
                 databases.listDocuments(DATABASE_ID, RELATIONSHIPS_COLLECTION_ID, [Query.equal('coachId', currentUser.$id), Query.equal('status', 'active')])
             ]);
 
-            setRequests(requestsRes.documents as Relationship[]);
-            setClients(clientsRes.documents as Relationship[]);
+            const reqDocs = requestsRes.documents as Relationship[];
+            const clientDocs = clientsRes.documents as Relationship[];
+            setRequests(reqDocs);
+            setClients(clientDocs);
+
+            const allUserIds = [...reqDocs, ...clientDocs].map(r => r.userId).filter(id => id);
+            if (allUserIds.length > 0) {
+                const profilesRes = await databases.listDocuments(DATABASE_ID, USERS_COLLECTION_ID, [Query.equal('$id', allUserIds)]);
+                const profilesMap = profilesRes.documents.reduce((acc, doc) => {
+                    acc[doc.$id] = doc as ClientProfile;
+                    return acc;
+                }, {} as Record<string, ClientProfile>);
+                setClientProfiles(profilesMap);
+            }
         } catch (error) { console.error(error); router.replace('/login'); }
         finally { setLoading(false); }
     }, []);
@@ -40,142 +61,155 @@ export default function CoachDashboard() {
 
     const handleLogout = () => { logout().then(() => router.replace('/login')); };
 
-    // --- CORRECTED: Removed fetchData() to rely on the optimistic update ---
-    const handleAcceptRequest = async (docId: string) => {
-        const requestToAccept = requests.find(r => r.$id === docId);
-        if (!requestToAccept) return;
-
+    const handleUpdateRequest = async (docId: string, newStatus: 'active' | 'ended') => {
+        const isAccepting = newStatus === 'active';
+        const requestToUpdate = requests.find(r => r.$id === docId);
+        if (!requestToUpdate) return;
         setProcessingId(docId);
-        // 1. Optimistically update the UI
-        setRequests(prev => prev.filter(r => r.$id !== docId));
-        setClients(prev => [...prev, { ...requestToAccept, status: 'active' }]);
-
+        if (isAccepting) {
+            setRequests(prev => prev.filter(r => r.$id !== docId));
+            setClients(prev => [...prev, { ...requestToUpdate, status: 'active' }]);
+        } else {
+            setRequests(prev => prev.filter(r => r.$id !== docId));
+        }
         try {
-            // 2. Send update to database in the background
-            await databases.updateDocument(DATABASE_ID, RELATIONSHIPS_COLLECTION_ID, docId, { status: 'active' });
+            if (isAccepting) {
+                await databases.updateDocument(DATABASE_ID, RELATIONSHIPS_COLLECTION_ID, docId, { status: 'active' });
+            } else {
+                await databases.deleteDocument(DATABASE_ID, RELATIONSHIPS_COLLECTION_ID, docId);
+            }
         } catch (e: any) {
-            Alert.alert("Error Accepting Request", e.message);
-            // 3. Revert UI on failure
-            setRequests(prev => [...prev, requestToAccept]);
-            setClients(prev => prev.filter(c => c.$id !== docId));
+            Alert.alert("Error", e.message);
+            fetchData(); // Revert on error
         } finally {
             setProcessingId(null);
         }
     };
 
-    const handleDeclineRequest = async (docId: string) => {
-        const requestToDecline = requests.find(r => r.$id === docId);
-        if (!requestToDecline) return;
-
-        setProcessingId(docId);
-        // 1. Optimistically update the UI
-        setRequests(prev => prev.filter(r => r.$id !== docId));
-
-        try {
-            // 2. Send delete request to the database
-            await databases.deleteDocument(DATABASE_ID, RELATIONSHIPS_COLLECTION_ID, docId);
-        } catch (e: any) {
-            Alert.alert("Error Declining Request", e.message);
-            // 3. Revert UI on failure
-            setRequests(prev => [...prev, requestToDecline]);
-        } finally {
-            setProcessingId(null);
-        }
-    };
+    const styles = createStyles(isWebLayout);
 
     if (loading) {
-        return <SafeAreaView style={styles.loadingContainer}><ActivityIndicator size="large" color="#6366F1" /></SafeAreaView>;
+        return <View style={styles.loadingContainer}><ActivityIndicator size="large" color="#4F46E5" /></View>;
     }
 
     return (
         <SafeAreaView style={styles.container}>
-            <LinearGradient colors={['#6366F1', '#8B5CF6']} style={styles.header}>
-                <View style={styles.headerContent}>
-                    <View>
-                        <Text style={styles.greeting}>Coach Dashboard</Text>
-                        <Text style={styles.title}>{user?.name}</Text>
-                    </View>
-                    <Pressable onPress={handleLogout} style={styles.logoutButton}><MaterialCommunityIcons name="logout" size={24} color="white" /></Pressable>
+            <View style={styles.navBar}>
+                <View style={styles.logoContainer}><MaterialCommunityIcons name="dumbbell" size={28} color="#4F46E5" /><Text style={styles.logoText}>FitCoach</Text></View>
+                <View style={styles.navActions}>
+                    <Pressable style={styles.navButton}><MaterialCommunityIcons name="bell-outline" size={22} color="#4B5563" /></Pressable>
+                    <Pressable style={styles.navButton} onPress={() => router.push('/profile-setup')}><MaterialCommunityIcons name="cog-outline" size={22} color="#4B5563" /></Pressable>
+                    <Pressable style={styles.navButton} onPress={handleLogout}><MaterialCommunityIcons name="logout" size={22} color="#EF4444" /></Pressable>
                 </View>
-                <View style={styles.statsContainer}>
-                    <View style={styles.statCard}><MaterialCommunityIcons name="account-group" size={24} color="#6366F1" /><Text style={styles.statNumber}>{clients.length}</Text><Text style={styles.statLabel}>Active Clients</Text></View>
-                    <View style={styles.statCard}><MaterialCommunityIcons name="clock-outline" size={24} color="#F59E0B" /><Text style={styles.statNumber}>{requests.length}</Text><Text style={styles.statLabel}>Pending Requests</Text></View>
-                </View>
-            </LinearGradient>
+            </View>
 
-            <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-                <View style={styles.section}>
-                    <View style={styles.sectionHeader}>
-                        <Text style={styles.sectionTitle}>Client Requests</Text>
-                        {requests.length > 0 && <View style={styles.badge}><Text style={styles.badgeText}>{requests.length}</Text></View>}
+            <ScrollView contentContainerStyle={styles.scrollContainer}>
+                <View style={styles.welcomeHeader}>
+                    <View style={styles.userAvatarContainer}>
+                        <Image source={{ uri: user?.prefs.avatar || undefined }} style={styles.userAvatar} />
                     </View>
-                    {requests.length > 0 ? requests.map(req => (
-                        <View key={req.$id} style={styles.requestCard}>
-                            <View style={styles.requestInfo}><View style={styles.avatarContainer}><MaterialCommunityIcons name="account" size={20} color="#6366F1" /></View><View><Text style={styles.requestTitle}>New Client Request</Text><Text style={styles.requestSubtitle}>User ID: {req.userId}</Text></View></View>
-                            {processingId === req.$id ? <ActivityIndicator color="#6366F1" /> : <View style={styles.requestActions}><Pressable style={styles.declineButton} onPress={() => handleDeclineRequest(req.$id)}><MaterialCommunityIcons name="close" size={18} color="#EF4444" /></Pressable><Pressable style={styles.acceptButton} onPress={() => handleAcceptRequest(req.$id)}><MaterialCommunityIcons name="check" size={18} color="white" /><Text style={styles.acceptButtonText}>Accept</Text></Pressable></View>}
-                        </View>
-                    )) : <View style={styles.emptyState}><MaterialCommunityIcons name="inbox-outline" size={48} color="#9CA3AF" /><Text style={styles.emptyTitle}>No pending requests</Text></View>}
-                </View>
-                <View style={styles.section}>
-                    <View style={styles.sectionHeader}>
-                        <Text style={styles.sectionTitle}>Active Clients</Text>
-                        {clients.length > 0 && <View style={[styles.badge, styles.successBadge]}><Text style={styles.badgeText}>{clients.length}</Text></View>}
+                    <View>
+                        <Text style={styles.greeting}>Welcome back, Coach!</Text>
+                        <Text style={styles.userName}>{user?.name}</Text>
                     </View>
-                    {clients.length > 0 ? clients.map(client => (
-                        <View key={client.$id} style={styles.clientCard}>
-                            <View style={styles.clientInfo}><View style={[styles.avatarContainer, styles.activeAvatar]}><MaterialCommunityIcons name="account-check" size={20} color="#10B981" /></View><View><Text style={styles.clientName}>Client: {client.userId}</Text><Text style={styles.clientStatus}>Active Training</Text></View></View>
-                            <Pressable style={styles.manageButton} onPress={() => router.push(`/coach/clients/${client.userId}/create-plan`)}><Text style={styles.manageButtonText}>Manage</Text></Pressable>
-                        </View>
-                    )) : <View style={styles.emptyState}><MaterialCommunityIcons name="account-group-outline" size={48} color="#9CA3AF" /><Text style={styles.emptyTitle}>No active clients</Text></View>}
                 </View>
-                <View style={styles.actionSection}>
-                    <Pressable style={styles.actionButton} onPress={() => router.push(`/coaches/${user?.$id}`)}><MaterialCommunityIcons name="account-eye" size={20} color="#6366F1" /><Text style={styles.actionButtonText}>View Public Profile</Text><MaterialCommunityIcons name="chevron-right" size={20} color="#9CA3AF" /></Pressable>
-                    <Pressable style={styles.actionButton} onPress={() => router.push('/profile-setup')}><MaterialCommunityIcons name="pencil" size={20} color="#6366F1" /><Text style={styles.actionButtonText}>Edit Profile</Text><MaterialCommunityIcons name="chevron-right" size={20} color="#9CA3AF" /></Pressable>
+
+                <View style={styles.mainLayout}>
+                    {/* Requests Column */}
+                    <View style={styles.column}>
+                        {requests.length > 0 ? requests.map(req => (
+                            <View key={req.$id} style={styles.card}>
+                                <View style={styles.cardHeader}>
+                                    <Image source={{ uri: clientProfiles[req.userId]?.avatar }} style={styles.clientAvatar} />
+                                    <View style={{ flex: 1 }}>
+                                        <Text style={styles.clientName}>{clientProfiles[req.userId]?.name || 'New User'}</Text>
+                                        <View style={styles.statusRow}>
+                                            <MaterialCommunityIcons name="clock-outline" size={16} color="#F59E0B" style={{ marginRight: 4 }} />
+                                            <Text style={styles.statusRequested}>Requested</Text>
+                                            <Text style={styles.cardDate}> · {new Date(req.$createdAt).toLocaleDateString()}</Text>
+                                        </View>
+                                    </View>
+                                </View>
+                                {processingId === req.$id ? <ActivityIndicator color="#4F46E5" /> : (
+                                    <View style={styles.cardActions}>
+                                        <Pressable style={styles.declineButton} onPress={() => handleUpdateRequest(req.$id, 'ended')}>
+                                            <MaterialCommunityIcons name="close-circle" size={18} color="#EF4444" />
+                                            <Text style={styles.declineButtonText}>Decline</Text>
+                                        </Pressable>
+                                        <Pressable style={styles.acceptButton} onPress={() => handleUpdateRequest(req.$id, 'active')}>
+                                            <MaterialCommunityIcons name="check-circle" size={18} color="#10B981" />
+                                            <Text style={styles.acceptButtonText}>Accept</Text>
+                                        </Pressable>
+                                    </View>
+                                )}
+                            </View>
+                        )) : (
+                            <View style={styles.emptyState}>
+                                <MaterialCommunityIcons name="account-plus-outline" size={40} color="#E0E7FF" />
+                                <Text style={styles.emptyText}>No new client requests.</Text>
+                            </View>
+                        )}
+                    </View>
+
+                    {/* Clients Column */}
+                    <View style={styles.column}>
+                        {clients.length > 0 ? clients.map(client => (
+                            <Pressable key={client.$id} style={[styles.card, styles.cardPressable]} onPress={() => router.push(`/coach/clients/${client.userId}/create-plan`)}>
+                                <View style={styles.cardHeader}>
+                                    <Image source={{ uri: clientProfiles[client.userId]?.avatar }} style={styles.clientAvatar} />
+                                    <View style={{ flex: 1 }}>
+                                        <Text style={styles.clientName}>{clientProfiles[client.userId]?.name}</Text>
+                                        <View style={styles.statusRow}>
+                                            <MaterialCommunityIcons name="check-circle" size={16} color="#10B981" style={{ marginRight: 4 }} />
+                                            <Text style={styles.statusActive}>Active</Text>
+                                        </View>
+                                    </View>
+                                    <MaterialCommunityIcons name="chevron-right" size={24} color="#9CA3AF" />
+                                </View>
+                            </Pressable>
+                        )) : (
+                            <View style={styles.emptyState}>
+                                <MaterialCommunityIcons name="account-group-outline" size={40} color="#E0E7FF" />
+                                <Text style={styles.emptyText}>No active clients.</Text>
+                            </View>
+                        )}
+                    </View>
                 </View>
             </ScrollView>
         </SafeAreaView>
     );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (isWebLayout: boolean) => StyleSheet.create({
     container: { flex: 1, backgroundColor: '#F8FAFC' },
     loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-    header: { paddingTop: 50, paddingBottom: 30, paddingHorizontal: 20, borderBottomLeftRadius: 30, borderBottomRightRadius: 30 },
-    headerContent: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 30 },
-    greeting: { fontSize: 16, color: 'rgba(255, 255, 255, 0.8)' },
-    title: { fontSize: 28, fontWeight: 'bold', color: 'white' },
-    logoutButton: { padding: 8, borderRadius: 12, backgroundColor: 'rgba(255, 255, 255, 0.1)' },
-    statsContainer: { flexDirection: 'row', gap: 16 },
-    statCard: { flex: 1, backgroundColor: 'white', borderRadius: 16, padding: 20, alignItems: 'center' },
-    statNumber: { fontSize: 32, fontWeight: 'bold', color: '#1F2937', marginTop: 8 },
-    statLabel: { fontSize: 14, color: '#6B7280', marginTop: 4 },
-    content: { flex: 1, marginTop: -15 },
-    section: { marginTop: 30, marginHorizontal: 20 },
-    sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-    sectionTitle: { fontSize: 20, fontWeight: '600', color: '#1F2937' },
-    badge: { backgroundColor: '#F59E0B', borderRadius: 12, paddingHorizontal: 8, paddingVertical: 4 },
-    successBadge: { backgroundColor: '#10B981' },
-    badgeText: { fontSize: 12, fontWeight: 'bold', color: 'white' },
-    requestCard: { backgroundColor: 'white', borderRadius: 16, padding: 16, marginBottom: 12, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8 },
-    requestInfo: { flexDirection: 'row', alignItems: 'center', flex: 1 },
-    avatarContainer: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#EEF2FF', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
-    activeAvatar: { backgroundColor: '#DCFCE7' },
-    requestTitle: { fontSize: 16, fontWeight: '600', color: '#1F2937' },
-    requestSubtitle: { fontSize: 14, color: '#6B7280', marginTop: 2 },
-    requestActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-    declineButton: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#FEF2F2', justifyContent: 'center', alignItems: 'center' },
-    acceptButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#10B981', paddingVertical: 8, paddingHorizontal: 16, borderRadius: 18, gap: 6 },
-    acceptButtonText: { color: 'white', fontWeight: '600', fontSize: 14 },
-    clientCard: { backgroundColor: 'white', borderRadius: 16, padding: 16, marginBottom: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-    clientInfo: { flexDirection: 'row', alignItems: 'center', flex: 1 },
-    clientName: { fontSize: 16, fontWeight: '600', color: '#1F2937' },
-    clientStatus: { fontSize: 14, color: '#10B981', marginTop: 2 },
-    manageButton: { backgroundColor: '#EEF2FF', paddingVertical: 8, paddingHorizontal: 16, borderRadius: 18 },
-    manageButtonText: { color: '#4338CA', fontWeight: '600' },
-    emptyState: { alignItems: 'center', paddingVertical: 40 },
-    emptyTitle: { fontSize: 18, fontWeight: '600', color: '#6B7280', marginTop: 12 },
-    emptyText: { fontSize: 14, color: '#9CA3AF' },
-    actionSection: { marginTop: 30, marginBottom: 40 },
-    actionButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'white', padding: 16, borderRadius: 16, marginBottom: 12 },
-    actionButtonText: { fontSize: 16, fontWeight: '600', color: '#1F2937', marginLeft: 12, flex: 1 },
+    navBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 24, height: 64, backgroundColor: 'white', borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
+    logoContainer: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    logoText: { fontSize: 20, fontWeight: 'bold', color: '#1F2937' },
+    navActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    navButton: { padding: 8 },
+    scrollContainer: { padding: isWebLayout ? 32 : 16 },
+    welcomeHeader: { flexDirection: 'row', alignItems: 'center', gap: 16, marginBottom: 32 },
+    userAvatarContainer: { width: 72, height: 72, borderRadius: 36, backgroundColor: 'white', justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 6 },
+    userAvatar: { width: 68, height: 68, borderRadius: 34, borderWidth: 2, borderColor: '#E0E7FF' },
+    greeting: { fontSize: 16, color: '#6B7280' },
+    userName: { fontSize: 28, fontWeight: 'bold', color: '#111827' },
+    mainLayout: { flexDirection: isWebLayout ? 'row' : 'column', gap: 32 },
+    column: { flex: 1, gap: 24 },
+    card: { backgroundColor: 'white', borderRadius: 20, padding: 20, borderWidth: 1, borderColor: '#F3F4F6', shadowColor: '#9CA3AF', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.07, shadowRadius: 12, marginBottom: 0 },
+    cardPressable: { transitionDuration: '150ms', transitionProperty: 'box-shadow', shadowColor: '#6366F1', shadowOpacity: 0.12 },
+    cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 16, marginBottom: 8 },
+    clientAvatar: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#E0E7FF', borderWidth: 2, borderColor: '#E0E7FF' },
+    clientName: { fontSize: 17, fontWeight: 'bold', color: '#1F2937' },
+    cardDate: { fontSize: 13, color: '#9CA3AF' },
+    statusRow: { flexDirection: 'row', alignItems: 'center', marginTop: 2 },
+    statusRequested: { fontSize: 13, color: '#F59E0B', fontWeight: '600', marginRight: 4 },
+    statusActive: { fontSize: 13, color: '#10B981', fontWeight: '600', marginRight: 4 },
+    cardActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 16, marginTop: 18, paddingTop: 16, borderTopWidth: 1, borderTopColor: '#F3F4F6' },
+    declineButton: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 10, paddingHorizontal: 20, borderRadius: 8, backgroundColor: '#FEE2E2', borderWidth: 1, borderColor: '#FCA5A5' },
+    declineButtonText: { color: '#B91C1C', fontWeight: '700', marginLeft: 4 },
+    acceptButton: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#D1FAE5', borderColor: '#6EE7B7', borderWidth: 1, paddingVertical: 10, paddingHorizontal: 20, borderRadius: 8 },
+    acceptButtonText: { color: '#047857', fontWeight: '700', marginLeft: 4 },
+    emptyState: { alignItems: 'center', justifyContent: 'center', padding: 32, backgroundColor: '#F3F4F6', borderRadius: 16, marginTop: 8 },
+    emptyText: { color: '#9CA3AF', fontStyle: 'italic', paddingTop: 12, fontSize: 15, textAlign: 'center' },
 });
